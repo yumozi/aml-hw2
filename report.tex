@@ -16,32 +16,25 @@
 
 \begin{document}
 \maketitle
+\noindent\textbf{Repository:} \url{https://github.com/yumozi/aml-hw2}
 
 % =========================================================================
 \section{Introduction}
 % =========================================================================
 
-This report compares two fundamentally different modeling paradigms---Gradient
-Boosted Decision Trees (GBDT) and Multi-Layer Perceptrons (MLP)---on a binary
-classification task: predicting whether a client of a Portuguese bank will
-subscribe to a term deposit after a phone-based marketing campaign.
+This report compares Gradient Boosted Decision Trees (GBDT) and Multi-Layer
+Perceptrons (MLP) on a binary classification task: predicting whether a client
+of a Portuguese bank will subscribe to a term deposit after a phone-based
+marketing campaign.
 
-The \textbf{Bank Marketing} dataset is provided in two versions: an extended
-version with 20 input features, and a classic version with 17 features (16
-inputs + 1 target). Since the dataset documentation only provides detailed
-descriptions for the 17-feature version, we opted to use the classic file
-(\texttt{bank\text{-}full.csv}) to ensure every feature is well-understood and
-interpretable. The selected dataset contains 45,211 records with 16 input
-features spanning client demographics
-(age, job, marital status, education), financial indicators (balance, credit
-default, housing/personal loans), and campaign attributes (contact type, month,
-number of contacts, outcome of previous campaigns). The target variable
-\texttt{y} is heavily imbalanced: only 11.7\% of clients subscribed (``yes''),
-while 88.3\% did not (``no'').
-
-This controlled experiment---same data, same splits, same evaluation---lets us
-directly compare how each model family learns, what preprocessing it demands,
-and where it excels or struggles.
+The \textbf{Bank Marketing} dataset comes in two versions: an extended version
+with 20 input features and a classic version with 17 features (16 inputs + 1
+target). We used the classic file (\texttt{bank\text{-}full.csv}) since
+detailed descriptions are only provided for the 17-feature version. It contains
+45,211 records spanning client demographics, financial indicators, and campaign
+attributes. The target is heavily imbalanced: only 11.7\% subscribed (``yes'')
+vs.\ 88.3\% (``no''). This controlled experiment---same data, splits, and
+evaluation---enables direct comparison of how each model family learns.
 
 % =========================================================================
 \section{Methods}
@@ -50,20 +43,12 @@ and where it excels or struggles.
 \subsection{Data Preparation}
 
 \paragraph{Missing values.}
-No columns contained null values, but several categorical features
-(\texttt{job}, \texttt{education}, \texttt{contact}, \texttt{poutcome}) used
-the string \texttt{"unknown"} as a placeholder. We considered three strategies:
-\begin{enumerate}[nosep]
-    \item \textbf{Keep ``unknown'' as its own category} --- simplest; may carry
-          signal (clients who withhold information may behave differently).
-    \item \textbf{Impute with mode} --- replaces unknowns with the most frequent
-          value, but discards the ``unknown'' signal.
-    \item \textbf{Drop rows with unknowns} --- cleanest data but loses
-          ${\sim}25\%$ of rows.
-\end{enumerate}
-We chose option~1 because ``unknown'' itself is informative: for instance,
-clients reached via an unknown contact method disproportionately came from
-older campaign records with lower subscription rates.
+No nulls exist, but several categorical features use \texttt{"unknown"} as a
+placeholder. We considered: (1)~keeping ``unknown'' as its own category,
+(2)~imputing with mode, (3)~dropping affected rows (${\sim}25\%$ loss). We
+chose option~1 because ``unknown'' itself carries signal---e.g., clients
+reached via an unknown contact method came disproportionately from older
+campaigns with lower subscription rates.
 
 \paragraph{Feature engineering.}
 Three derived features were added:
@@ -77,20 +62,13 @@ Three derived features were added:
 \end{itemize}
 
 \paragraph{Duration removal.}
-The \texttt{duration} feature (last contact duration in seconds) was dropped.
-While the dataset authors note it is highly predictive, it is only available
-\emph{after} a call ends and therefore cannot be used in a realistic deployment
-scenario. Removing it forces the models to learn from features that are
-available before the campaign call is made.
+The \texttt{duration} feature was dropped---while highly predictive, it is only
+known \emph{after} a call ends and cannot be used for realistic prediction.
 
 \paragraph{Encoding.}
-We considered three encoding strategies: (a)~one-hot encoding, (b)~label
-encoding, and (c)~a mix (label for binary columns, one-hot for multi-class).
-We chose \textbf{one-hot encoding with \texttt{drop\_first=True}} for all
-categoricals. This avoids implying ordinal relationships (e.g., ``admin''
-$<$ ``student'') that could mislead gradient-based MLP training, while the
-dropped reference category prevents multicollinearity. The result was 47 input
-features.
+We chose \textbf{one-hot encoding with \texttt{drop\_first=True}} over label
+encoding to avoid implying ordinal relationships that could mislead MLP
+training, yielding 47 input features.
 
 \paragraph{Train / Validation / Test split.}
 A stratified 70\,/\,15\,/\,15 split yielded 31,647 training, 6,782 validation,
@@ -98,24 +76,17 @@ and 6,782 test samples. Stratification preserved the ${\sim}11.7\%$ positive
 rate across all three sets.
 
 \paragraph{Feature scaling.}
-A \texttt{StandardScaler} was \textbf{fit on the training set only} and then
-applied to validation and test sets, preventing data leakage.
-
-Scaling is essential for MLP because its neurons compute weighted sums of
-inputs followed by non-linear activations; features on vastly different scales
-(e.g., \texttt{balance} ranging to 102,127 vs.\ binary indicators) elongate
-the loss surface, causing slow, unstable gradient descent. Standardization
-(mean$=0$, std$=1$) makes the loss landscape more isotropic.
-
-Decision trees, by contrast, split on individual features using thresholds
-(``is balance $> 500$?''). These splits are invariant to monotonic
-transformations---whether balance ranges from 0--100,000 or is standardized to
-$-2$ to $+3$, the tree finds the same optimal split. Scaling is therefore
+A \texttt{StandardScaler} was \textbf{fit on training data only} and applied to
+validation/test sets (no data leakage). Scaling is essential for MLP: neurons
+compute weighted sums, so features on different scales (e.g., \texttt{balance}
+up to 102,127 vs.\ binary flags) elongate the loss surface, causing unstable
+gradients. Standardization (mean$=0$, std$=1$) makes the landscape isotropic.
+Trees split on thresholds invariant to monotonic transformations, so scaling is
 unnecessary for GBDT.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{fig_data_preparation.png}
+    \includegraphics[width=0.75\textwidth]{fig_data_preparation.png}
     \caption{Left: class distribution showing 88:12 imbalance.
              Right: Pearson correlation heatmap of numeric features with the
              target. Most individual correlations are weak ($|r| < 0.15$),
@@ -142,7 +113,7 @@ ${\sim}0.09$---indicating mild overfitting at most.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{fig_xgb_loss_curve.png}
+    \includegraphics[width=0.65\textwidth]{fig_xgb_loss_curve.png}
     \caption{XGBoost baseline: training vs.\ validation log-loss over 500
              boosting rounds. The red dashed line marks the round with minimum
              validation loss.}
@@ -174,7 +145,7 @@ the best F1 trade-off.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{fig_xgb_learning_rate.png}
+    \includegraphics[width=0.75\textwidth]{fig_xgb_learning_rate.png}
     \caption{Validation loss (left) and training loss (right) for three
              learning rates. Lower rates converge more slowly but generalize
              comparably; higher rates risk overfitting earlier.}
@@ -195,7 +166,7 @@ is robust to hyperparameter choices on this dataset.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{fig_xgb_feature_importance.png}
+    \includegraphics[width=0.6\textwidth]{fig_xgb_feature_importance.png}
     \caption{Top 20 feature importances from the tuned XGBoost model. Previous
              campaign outcome (\texttt{poutcome}), contact method, campaign
              month, and account balance dominate.}
@@ -223,7 +194,7 @@ loss descent, and recall for ``Yes'' improved from 0.24 to 0.48.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{fig_mlp_loss_balanced_vs_imbalanced.png}
+    \includegraphics[width=0.75\textwidth]{fig_mlp_loss_balanced_vs_imbalanced.png}
     \caption{MLP loss curves before (left) and after (right) minority
              oversampling. Without balancing, the validation score flatlines
              immediately. With balancing, training shows genuine convergence.}
@@ -250,16 +221,8 @@ Architecture & Val Accuracy & Val F1 & Iterations \\
          more confidently rather than improving minority-class detection.}
 \end{table}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{fig_mlp_architecture_comparison.png}
-    \caption{Training loss curves for different MLP architectures. Deeper
-             networks achieve lower training loss but do not generalize better
-             on the minority class.}
-    \label{fig:mlp_arch}
-\end{figure}
-
 \paragraph{Learning rate and activation study.}
+We also compared relu vs.\ tanh activations across learning rates:
 
 \begin{table}[H]
 \centering
@@ -279,28 +242,12 @@ tanh, lr=0.01 & 0.816 & 0.315 & 113 \\
          model defaults to predicting ``No.''}
 \end{table}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{fig_mlp_lr_activation.png}
-    \caption{Training loss curves for different learning rates and activation
-             functions. Higher learning rates converge faster but with more
-             noise; tanh converges more smoothly but achieves worse F1.}
-    \label{fig:mlp_lr}
-\end{figure}
-
 \paragraph{Hyperparameter tuning.}
 \texttt{RandomizedSearchCV} over architectures, activations, learning rates,
 and L2 regularization strength yielded: \texttt{(128, 64)}, \texttt{tanh},
 \texttt{lr=0.001}, \texttt{alpha=0.001}. The CV F1 of 0.93 was measured on
 the balanced (oversampled) data and is therefore inflated; the real validation
 F1 on original data was 0.33.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{fig_mlp_final_loss.png}
-    \caption{Training loss and validation score for the final tuned MLP.}
-    \label{fig:mlp_final}
-\end{figure}
 
 % =========================================================================
 \section{GBDT vs MLP Comparison}
@@ -333,7 +280,7 @@ Training Time   & 0.32\,s & 32.28\,s & GBDT \\
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{fig_comparison.png}
+    \includegraphics[width=0.75\textwidth]{fig_comparison.png}
     \caption{Left: Precision--Recall curves on the test set. GBDT dominates
              across all recall levels. Right: side-by-side bar chart of key
              metrics.}
@@ -389,37 +336,28 @@ makes it naturally resistant to overfitting without careful manual tuning.
 
 \subsection{Bias--Variance Reflection}
 
-GBDT reduces bias through \textbf{sequential boosting}---each new tree
-corrects the residual errors of the ensemble so far---and controls variance
-through regularization (tree depth limits, row/column subsampling, L1/L2
-penalties). This combination is well-suited to medium-sized tabular data.
-
-MLP reduces bias through \textbf{flexible function approximation} (universal
-approximation theorem) but is prone to high variance, especially with limited
-data and class imbalance. The oversampling strategy addressed the imbalance
-but introduced its own variance: duplicated minority samples can cause the
-network to memorize specific instances rather than learning generalizable
-patterns. This was reflected in the inflated CV F1 (0.93 on balanced data)
-versus the much lower test F1 (0.31 on real data).
+GBDT reduces bias via \textbf{sequential boosting} (each tree corrects prior
+errors) and controls variance through regularization (depth limits, subsampling,
+L1/L2 penalties)---well-suited to medium-sized tabular data.
+MLP reduces bias via \textbf{flexible function approximation} but is prone to
+high variance with limited data. Oversampling addressed class imbalance but
+introduced variance through duplicated samples, reflected in the inflated CV
+F1 (0.93 on balanced data) vs.\ test F1 (0.31 on real data).
 
 \subsection{Key lessons learned}
 
 \begin{enumerate}[nosep]
-    \item \textbf{Class imbalance must be handled explicitly.} For GBDT,
-          \texttt{scale\_pos\_weight} provided a clean, built-in solution.
-          For MLP, the lack of a \texttt{class\_weight} parameter forced us
-          to oversample, which was effective but added pipeline complexity
-          and inflated cross-validation scores.
-    \item \textbf{Accuracy is misleading under imbalance.} MLP achieved higher
-          accuracy (83.3\%) than GBDT (82.3\%), but this was entirely due to
-          more aggressive ``No'' predictions. F1, precision--recall, and
-          AUC-PR are far more informative.
-    \item \textbf{Simpler architectures can outperform deeper ones.} For MLP,
-          adding layers increased accuracy but \emph{decreased} F1---the extra
-          capacity was used to predict the majority class more confidently.
+    \item \textbf{Class imbalance must be handled explicitly.}
+          \texttt{scale\_pos\_weight} worked cleanly for GBDT; MLP required
+          oversampling, adding complexity and inflating CV scores.
+    \item \textbf{Accuracy is misleading under imbalance.} MLP's higher
+          accuracy (83.3\% vs.\ 82.3\%) was due to more aggressive ``No''
+          predictions. F1 and AUC-PR are more informative.
+    \item \textbf{Simpler MLP architectures can outperform deeper ones.}
+          Extra capacity was used to predict the majority class more
+          confidently, \emph{decreasing} F1.
     \item \textbf{Feature scaling is non-negotiable for neural networks.}
-          Without standardization, MLP convergence is slow and unstable. Trees
-          are invariant to feature scale.
+          Trees are invariant to feature scale.
 \end{enumerate}
 
 \subsection{Limitations}
